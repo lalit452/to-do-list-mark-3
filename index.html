@@ -1,0 +1,1387 @@
+<!-- multiiple day analytics button  -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task List with Time Allotment</title>
+    <style>
+        .not-allotted {
+            background-color: pink;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+
+        li {
+            list-style: none;
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #f0f0f0;
+        }
+
+        .delete-btn, .edit-btn {
+            margin-left: 10px;
+            background-color: red;
+            color: white;
+            border: none;
+            padding: 5px;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+
+        .edit-btn {
+            background-color: green;
+        }
+
+        #date-selector {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        #prev-date, #next-date, #days-analytics-btn {
+            background-color: #2b84ea;
+            color: white;
+            border: none;
+            padding: 5px;
+            cursor: pointer;
+            border-radius: 3px;
+            margin: 0 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="date-selector">
+        <button id="prev-date">&lt;</button>
+        <span id="current-date"></span>
+        <button id="next-date">&gt;</button>
+        <button id="days-analytics-btn">Days Analytics</button>
+    </div>
+
+    <form id="task-form">
+        <input type="text" id="task-name" placeholder="Task Name" required>
+        <input type="time" id="task-start-time" required>
+        <input type="time" id="task-end-time" required>
+        <button type="submit">Add Task</button>
+    </form>
+    <ul id="task-list"></ul>
+
+    <script>
+        let selectedDate = new Date();
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadTasksForDate(selectedDate);
+            updateDateDisplay();
+        });
+
+        document.getElementById('task-form').addEventListener('submit', addTask);
+        document.getElementById('prev-date').addEventListener('click', () => changeDate(-1));
+        document.getElementById('next-date').addEventListener('click', () => changeDate(1));
+        document.getElementById('days-analytics-btn').addEventListener('click', () => {
+            const monthYear = `${selectedDate.getFullYear()}-${selectedDate.getMonth() + 1}`;
+            window.location.href = `days-analytics.html?month=${monthYear}`;
+        });
+
+        function updateDateDisplay() {
+            document.getElementById('current-date').innerText = selectedDate.toDateString();
+        }
+
+        function changeDate(offset) {
+            selectedDate.setDate(selectedDate.getDate() + offset);
+            updateDateDisplay();
+            loadTasksForDate(selectedDate);
+        }
+
+        function addTask(e) {
+            e.preventDefault();
+
+            const taskName = document.getElementById('task-name').value;
+            const startTime = document.getElementById('task-start-time').value;
+            const endTime = document.getElementById('task-end-time').value;
+
+            // Validate times
+            if (startTime >= endTime) {
+                alert('End time must be later than start time.');
+                return;
+            }
+
+            const task = { name: taskName, startTime: startTime, endTime: endTime };
+            const tasks = getTasksForDate(selectedDate);
+            tasks.push(task);
+
+            tasks.sort((a, b) => a.startTime.localeCompare(b.startTime));
+            saveTasksForDate(selectedDate, tasks);
+
+            renderTasks(tasks);
+            document.getElementById('task-form').reset();
+        }
+
+        function getTasksForDate(date) {
+            const formattedDate = date.toISOString().split('T')[0];
+            return localStorage.getItem(formattedDate) ? JSON.parse(localStorage.getItem(formattedDate)) : [];
+        }
+
+        function saveTasksForDate(date, tasks) {
+            const formattedDate = date.toISOString().split('T')[0];
+            localStorage.setItem(formattedDate, JSON.stringify(tasks));
+        }
+
+        function loadTasksForDate(date) {
+            const tasks = getTasksForDate(date);
+            renderTasks(tasks);
+        }
+
+        function renderTasks(tasks) {
+            const taskList = document.getElementById('task-list');
+            taskList.innerHTML = '';
+
+            let lastEndTime = "00:00";
+
+            tasks.forEach(task => {
+                if (lastEndTime < task.startTime) {
+                    renderNotAllottedTimeSlot(taskList, lastEndTime, task.startTime);
+                }
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <span>${task.name} (${formatTime(task.startTime)} - ${formatTime(task.endTime)})</span>
+                    <button class="edit-btn" onclick="editTask('${task.startTime}')">Edit</button>
+                    <button class="delete-btn" onclick="deleteTask('${task.startTime}')">Delete</button>
+                `;
+                taskList.appendChild(li);
+                lastEndTime = task.endTime;
+            });
+
+            if (lastEndTime < "23:59") {
+                renderNotAllottedTimeSlot(taskList, lastEndTime, "23:59");
+            }
+        }
+
+        function renderNotAllottedTimeSlot(taskList, startTime, endTime) {
+            const duration = calculateDuration(startTime, endTime);
+            const li = document.createElement('li');
+            li.className = 'not-allotted';
+            li.innerHTML = `
+                <span>Not Allotted (${formatTime(startTime)} - ${formatTime(endTime)}) - ${duration}</span>
+            `;
+            taskList.appendChild(li);
+        }
+
+        function formatTime(time) {
+            let [hours, minutes] = time.split(':');
+            hours = parseInt(hours);
+
+            let period = 'AM';
+            if (hours >= 12) {
+                period = 'PM';
+                hours = hours > 12 ? hours - 12 : hours;
+            } else if (hours === 0) {
+                hours = 12;
+            }
+
+            return `${hours}:${minutes} ${period}`;
+        }
+
+        function calculateDuration(startTime, endTime) {
+            const start = convertToMinutes(startTime);
+            const end = convertToMinutes(endTime);
+
+            const diff = end - start;
+            const hours = Math.floor(diff / 60);
+            const minutes = diff % 60;
+
+            return `${hours}h ${minutes}m`;
+        }
+
+        function convertToMinutes(time) {
+            let [hours, minutes] = time.split(':');
+            return parseInt(hours) * 60 + parseInt(minutes);
+        }
+
+        function deleteTask(startTime) {
+            let tasks = getTasksForDate(selectedDate);
+            tasks = tasks.filter(task => task.startTime !== startTime);
+            saveTasksForDate(selectedDate, tasks);
+            renderTasks(tasks);
+        }
+
+        function editTask(startTime) {
+            let tasks = getTasksForDate(selectedDate);
+            const taskToEdit = tasks.find(task => task.startTime === startTime);
+
+            if (taskToEdit) {
+                document.getElementById('task-name').value = taskToEdit.name;
+                document.getElementById('task-start-time').value = taskToEdit.startTime;
+                document.getElementById('task-end-time').value = taskToEdit.endTime;
+
+                tasks = tasks.filter(task => task.startTime !== startTime);
+                saveTasksForDate(selectedDate, tasks);
+
+                renderTasks(tasks);
+            }
+        }
+    </script>
+</body>
+</html>
+
+
+
+
+
+<!-- additional days analytics page  but have only single day not alloted time per day-->
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task List with Time Allotment</title>
+    <style>
+        .not-allotted {
+            background-color: pink;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+
+        li {
+            list-style: none;
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #f0f0f0;
+        }
+
+        .delete-btn, .edit-btn {
+            margin-left: 10px;
+            background-color: red;
+            color: white;
+            border: none;
+            padding: 5px;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+
+        .edit-btn {
+            background-color: green;
+        }
+
+        #date-selector {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        #prev-date, #next-date, #days-analytics-btn {
+            background-color: #2b84ea;
+            color: white;
+            border: none;
+            padding: 5px;
+            cursor: pointer;
+            border-radius: 3px;
+            margin: 0 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="date-selector">
+        <button id="prev-date">&lt;</button>
+        <span id="current-date"></span>
+        <button id="next-date">&gt;</button>
+        <button id="days-analytics-btn">Days Analytics</button>
+    </div>
+
+    <form id="task-form">
+        <input type="text" id="task-name" placeholder="Task Name" required>
+        <input type="time" id="task-start-time" required>
+        <input type="time" id="task-end-time" required>
+        <button type="submit">Add Task</button>
+    </form>
+    <ul id="task-list"></ul>
+
+    <script>
+        let selectedDate = new Date();
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadTasksForDate(selectedDate);
+            updateDateDisplay();
+        });
+
+        document.getElementById('task-form').addEventListener('submit', addTask);
+        document.getElementById('prev-date').addEventListener('click', () => changeDate(-1));
+        document.getElementById('next-date').addEventListener('click', () => changeDate(1));
+        document.getElementById('days-analytics-btn').addEventListener('click', () => {
+            const formattedDate = selectedDate.toISOString().split('T')[0];
+            window.location.href = `days-analytics.html?date=${formattedDate}`;
+        });
+
+        function updateDateDisplay() {
+            document.getElementById('current-date').innerText = selectedDate.toDateString();
+        }
+
+        function changeDate(offset) {
+            selectedDate.setDate(selectedDate.getDate() + offset);
+            updateDateDisplay();
+            loadTasksForDate(selectedDate);
+        }
+
+        function addTask(e) {
+            e.preventDefault();
+
+            const taskName = document.getElementById('task-name').value;
+            const startTime = document.getElementById('task-start-time').value;
+            const endTime = document.getElementById('task-end-time').value;
+
+            // Validate times
+            if (startTime >= endTime) {
+                alert('End time must be later than start time.');
+                return;
+            }
+
+            const task = { name: taskName, startTime: startTime, endTime: endTime };
+            const tasks = getTasksForDate(selectedDate);
+            tasks.push(task);
+
+            tasks.sort((a, b) => a.startTime.localeCompare(b.startTime));
+            saveTasksForDate(selectedDate, tasks);
+
+            renderTasks(tasks);
+            document.getElementById('task-form').reset();
+        }
+
+        function getTasksForDate(date) {
+            const formattedDate = date.toISOString().split('T')[0];
+            return localStorage.getItem(formattedDate) ? JSON.parse(localStorage.getItem(formattedDate)) : [];
+        }
+
+        function saveTasksForDate(date, tasks) {
+            const formattedDate = date.toISOString().split('T')[0];
+            localStorage.setItem(formattedDate, JSON.stringify(tasks));
+        }
+
+        function loadTasksForDate(date) {
+            const tasks = getTasksForDate(date);
+            renderTasks(tasks);
+        }
+
+        function renderTasks(tasks) {
+            const taskList = document.getElementById('task-list');
+            taskList.innerHTML = '';
+
+            let lastEndTime = "00:00";
+
+            tasks.forEach(task => {
+                if (lastEndTime < task.startTime) {
+                    renderNotAllottedTimeSlot(taskList, lastEndTime, task.startTime);
+                }
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <span>${task.name} (${formatTime(task.startTime)} - ${formatTime(task.endTime)})</span>
+                    <button class="edit-btn" onclick="editTask('${task.startTime}')">Edit</button>
+                    <button class="delete-btn" onclick="deleteTask('${task.startTime}')">Delete</button>
+                `;
+                taskList.appendChild(li);
+                lastEndTime = task.endTime;
+            });
+
+            if (lastEndTime < "23:59") {
+                renderNotAllottedTimeSlot(taskList, lastEndTime, "23:59");
+            }
+        }
+
+        function renderNotAllottedTimeSlot(taskList, startTime, endTime) {
+            const duration = calculateDuration(startTime, endTime);
+            const li = document.createElement('li');
+            li.className = 'not-allotted';
+            li.innerHTML = `
+                <span>Not Allotted (${formatTime(startTime)} - ${formatTime(endTime)}) - ${duration}</span>
+            `;
+            taskList.appendChild(li);
+        }
+
+        function formatTime(time) {
+            let [hours, minutes] = time.split(':');
+            hours = parseInt(hours);
+
+            let period = 'AM';
+            if (hours >= 12) {
+                period = 'PM';
+                hours = hours > 12 ? hours - 12 : hours;
+            } else if (hours === 0) {
+                hours = 12;
+            }
+
+            return `${hours}:${minutes} ${period}`;
+        }
+
+        function calculateDuration(startTime, endTime) {
+            const start = convertToMinutes(startTime);
+            const end = convertToMinutes(endTime);
+
+            const diff = end - start;
+            const hours = Math.floor(diff / 60);
+            const minutes = diff % 60;
+
+            return `${hours}h ${minutes}m`;
+        }
+
+        function convertToMinutes(time) {
+            let [hours, minutes] = time.split(':');
+            return parseInt(hours) * 60 + parseInt(minutes);
+        }
+
+        function deleteTask(startTime) {
+            let tasks = getTasksForDate(selectedDate);
+            tasks = tasks.filter(task => task.startTime !== startTime);
+            saveTasksForDate(selectedDate, tasks);
+            renderTasks(tasks);
+        }
+
+        function editTask(startTime) {
+            let tasks = getTasksForDate(selectedDate);
+            const taskToEdit = tasks.find(task => task.startTime === startTime);
+
+            if (taskToEdit) {
+                document.getElementById('task-name').value = taskToEdit.name;
+                document.getElementById('task-start-time').value = taskToEdit.startTime;
+                document.getElementById('task-end-time').value = taskToEdit.endTime;
+
+                tasks = tasks.filter(task => task.startTime !== startTime);
+                saveTasksForDate(selectedDate, tasks);
+
+                renderTasks(tasks);
+            }
+        }
+    </script>
+</body>
+</html> -->
+
+
+
+
+
+<!--                     day by day to do list with different pages -->
+
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task List with Time Allotment</title>
+    <style>
+        .not-allotted {
+            background-color: pink;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+
+        li {
+            list-style: none;
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #f0f0f0;
+        }
+
+        .delete-btn, .edit-btn {
+            margin-left: 10px;
+            background-color: red;
+            color: white;
+            border: none;
+            padding: 5px;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+
+        .edit-btn {
+            background-color: green;
+        }
+
+        #date-selector {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        #prev-date, #next-date {
+            background-color: #2b84ea;
+            color: white;
+            border: none;
+            padding: 5px;
+            cursor: pointer;
+            border-radius: 3px;
+            margin: 0 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="date-selector">
+        <button id="prev-date">&lt;</button>
+        <span id="current-date"></span>
+        <button id="next-date">&gt;</button>
+    </div>
+
+    <form id="task-form">
+        <input type="text" id="task-name" placeholder="Task Name" required>
+        <input type="time" id="task-start-time" required>
+        <input type="time" id="task-end-time" required>
+        <button type="submit">Add Task</button>
+    </form>
+    <ul id="task-list"></ul>
+
+    <script>
+        let selectedDate = new Date();
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadTasksForDate(selectedDate);
+            updateDateDisplay();
+        });
+
+        document.getElementById('task-form').addEventListener('submit', addTask);
+        document.getElementById('prev-date').addEventListener('click', () => changeDate(-1));
+        document.getElementById('next-date').addEventListener('click', () => changeDate(1));
+
+        function updateDateDisplay() {
+            document.getElementById('current-date').innerText = selectedDate.toDateString();
+        }
+
+        function changeDate(offset) {
+            selectedDate.setDate(selectedDate.getDate() + offset);
+            updateDateDisplay();
+            loadTasksForDate(selectedDate);
+        }
+
+        function addTask(e) {
+            e.preventDefault();
+
+            const taskName = document.getElementById('task-name').value;
+            const startTime = document.getElementById('task-start-time').value;
+            const endTime = document.getElementById('task-end-time').value;
+
+            const task = { name: taskName, startTime: startTime, endTime: endTime };
+            const tasks = getTasksForDate(selectedDate);
+            tasks.push(task);
+
+            tasks.sort((a, b) => a.startTime.localeCompare(b.startTime));
+            saveTasksForDate(selectedDate, tasks);
+
+            renderTasks(tasks);
+            document.getElementById('task-form').reset();
+        }
+
+        function getTasksForDate(date) {
+            const formattedDate = date.toISOString().split('T')[0];
+            return localStorage.getItem(formattedDate) ? JSON.parse(localStorage.getItem(formattedDate)) : [];
+        }
+
+        function saveTasksForDate(date, tasks) {
+            const formattedDate = date.toISOString().split('T')[0];
+            localStorage.setItem(formattedDate, JSON.stringify(tasks));
+        }
+
+        function loadTasksForDate(date) {
+            const tasks = getTasksForDate(date);
+            renderTasks(tasks);
+        }
+
+        function renderTasks(tasks) {
+            const taskList = document.getElementById('task-list');
+            taskList.innerHTML = '';
+
+            let lastEndTime = "00:00";
+
+            tasks.forEach(task => {
+                if (lastEndTime < task.startTime) {
+                    renderNotAllottedTimeSlot(taskList, lastEndTime, task.startTime);
+                }
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <span>${task.name} (${formatTime(task.startTime)} - ${formatTime(task.endTime)})</span>
+                    <button class="edit-btn" onclick="editTask('${task.startTime}')">Edit</button>
+                    <button class="delete-btn" onclick="deleteTask('${task.startTime}')">Delete</button>
+                `;
+                taskList.appendChild(li);
+                lastEndTime = task.endTime;
+            });
+
+            if (lastEndTime < "23:59") {
+                renderNotAllottedTimeSlot(taskList, lastEndTime, "23:59");
+            }
+        }
+
+        function renderNotAllottedTimeSlot(taskList, startTime, endTime) {
+            const duration = calculateDuration(startTime, endTime);
+            const li = document.createElement('li');
+            li.className = 'not-allotted';
+            li.innerHTML = `
+                <span>Not Allotted (${formatTime(startTime)} - ${formatTime(endTime)}) - ${duration}</span>
+            `;
+            taskList.appendChild(li);
+        }
+
+        function formatTime(time) {
+            let [hours, minutes] = time.split(':');
+            hours = parseInt(hours);
+
+            let period = 'AM';
+            if (hours >= 12) {
+                period = 'PM';
+                hours = hours > 12 ? hours - 12 : hours;
+            } else if (hours === 0) {
+                hours = 12;
+            }
+
+            return `${hours}:${minutes} ${period}`;
+        }
+
+        function calculateDuration(startTime, endTime) {
+            const start = convertToMinutes(startTime);
+            const end = convertToMinutes(endTime);
+
+            const diff = end - start;
+            const hours = Math.floor(diff / 60);
+            const minutes = diff % 60;
+
+            return `${hours}h ${minutes}m`;
+        }
+
+        function convertToMinutes(time) {
+            let [hours, minutes] = time.split(':');
+            return parseInt(hours) * 60 + parseInt(minutes);
+        }
+
+        function deleteTask(startTime) {
+            let tasks = getTasksForDate(selectedDate);
+            tasks = tasks.filter(task => task.startTime !== startTime);
+            saveTasksForDate(selectedDate, tasks);
+            renderTasks(tasks);
+        }
+
+        function editTask(startTime) {
+            let tasks = getTasksForDate(selectedDate);
+            const taskToEdit = tasks.find(task => task.startTime === startTime);
+
+            if (taskToEdit) {
+                document.getElementById('task-name').value = taskToEdit.name;
+                document.getElementById('task-start-time').value = taskToEdit.startTime;
+                document.getElementById('task-end-time').value = taskToEdit.endTime;
+
+                tasks = tasks.filter(task => task.startTime !== startTime);
+                saveTasksForDate(selectedDate, tasks);
+
+                renderTasks(tasks);
+            }
+        }
+    </script>
+</body>
+</html>  -->
+
+
+<!--                   all to do of different dates cooming in same page       -->
+
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task List with Calendar and Time Allotment</title>
+    <style>
+        .not-allotted {
+            background-color: pink;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+
+        li {
+            list-style: none;
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #f0f0f0;
+        }
+
+        .delete-btn {
+            margin-left: 10px;
+            background-color: red;
+            color: white;
+            border: none;
+            padding: 5px;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+
+        .edit-btn {
+            margin-left: 10px;
+            background-color: green;
+            color: white;
+            border: none;
+            padding: 5px;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <form id="task-form">
+        <input type="date" id="task-date" required>
+        <input type="text" id="task-name" placeholder="Task Name" required>
+        <input type="time" id="task-start-time" required>
+        <input type="time" id="task-end-time" required>
+        <button type="submit">Add Task</button>
+    </form>
+    <ul id="task-list"></ul>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', loadTasks);
+
+        document.getElementById('task-form').addEventListener('submit', addTask);
+
+        function addTask(e) {
+            e.preventDefault();
+
+            const taskDate = document.getElementById('task-date').value;
+            const taskName = document.getElementById('task-name').value;
+            const startTime = document.getElementById('task-start-time').value;
+            const endTime = document.getElementById('task-end-time').value;
+
+            const task = { name: taskName, date: taskDate, startTime: startTime, endTime: endTime };
+
+            let tasks = getTasks();
+            tasks.push(task);
+
+            tasks.sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
+
+            localStorage.setItem('tasks', JSON.stringify(tasks));
+
+            renderTasks();
+
+            document.getElementById('task-form').reset();
+        }
+
+        function getTasks() {
+            return localStorage.getItem('tasks') ? JSON.parse(localStorage.getItem('tasks')) : [];
+        }
+
+        function loadTasks() {
+            renderTasks();
+        }
+
+        function renderTasks() {
+            const tasks = getTasks();
+            const taskList = document.getElementById('task-list');
+            taskList.innerHTML = '';
+
+            let lastEndTime = "00:00";
+            let currentDate = "";
+
+            tasks.forEach(task => {
+                if (currentDate !== task.date) {
+                    currentDate = task.date;
+                    const dateHeader = document.createElement('li');
+                    dateHeader.innerHTML = `<strong>${currentDate}</strong>`;
+                    taskList.appendChild(dateHeader);
+                    lastEndTime = "00:00";  // Reset for each day
+                }
+
+                if (lastEndTime < task.startTime) {
+                    renderNotAllottedTimeSlot(taskList, lastEndTime, task.startTime);
+                }
+
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <span>${task.name} (${formatTime(task.startTime)} - ${formatTime(task.endTime)})</span>
+                    <button class="edit-btn" onclick="editTask('${task.date}', '${task.startTime}')">Edit</button>
+                    <button class="delete-btn" onclick="deleteTask('${task.date}', '${task.startTime}')">Delete</button>
+                `;
+                taskList.appendChild(li);
+                lastEndTime = task.endTime;
+            });
+
+            if (lastEndTime < "23:59") {
+                renderNotAllottedTimeSlot(taskList, lastEndTime, "23:59");
+            }
+        }
+
+        function renderNotAllottedTimeSlot(taskList, startTime, endTime) {
+            const duration = calculateDuration(startTime, endTime);
+            const li = document.createElement('li');
+            li.className = 'not-allotted';
+            li.innerHTML = `
+                <span>Not Allotted (${formatTime(startTime)} - ${formatTime(endTime)}) - ${duration}</span>
+            `;
+            taskList.appendChild(li);
+        }
+
+        function formatTime(time) {
+            let [hours, minutes] = time.split(':');
+            hours = parseInt(hours);
+
+            let period = 'AM';
+            if (hours >= 12) {
+                period = 'PM';
+                hours = hours > 12 ? hours - 12 : hours;
+            } else if (hours === 0) {
+                hours = 12;
+            }
+
+            return `${hours}:${minutes} ${period}`;
+        }
+
+        function calculateDuration(startTime, endTime) {
+            const start = convertToMinutes(startTime);
+            const end = convertToMinutes(endTime);
+
+            const diff = end - start;
+            const hours = Math.floor(diff / 60);
+            const minutes = diff % 60;
+
+            return `${hours}h ${minutes}m`;
+        }
+
+        function convertToMinutes(time) {
+            let [hours, minutes] = time.split(':');
+            return parseInt(hours) * 60 + parseInt(minutes);
+        }
+
+        function deleteTask(date, startTime) {
+            let tasks = getTasks();
+            tasks = tasks.filter(task => !(task.date === date && task.startTime === startTime));
+            localStorage.setItem('tasks', JSON.stringify(tasks));
+            renderTasks();
+        }
+
+        function editTask(date, startTime) {
+            let tasks = getTasks();
+            const taskToEdit = tasks.find(task => task.date === date && task.startTime === startTime);
+
+            if (taskToEdit) {
+                document.getElementById('task-date').value = taskToEdit.date;
+                document.getElementById('task-name').value = taskToEdit.name;
+                document.getElementById('task-start-time').value = taskToEdit.startTime;
+                document.getElementById('task-end-time').value = taskToEdit.endTime;
+
+                // Remove the task being edited
+                tasks = tasks.filter(task => !(task.date === date && task.startTime === startTime));
+                localStorage.setItem('tasks', JSON.stringify(tasks));
+
+                renderTasks();
+            }
+        }
+    </script>
+</body>
+</html> -->
+
+
+<!--                        perfect wise but for single day -->
+
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task List with Time Allotment</title>
+    <style>
+        .not-allotted {
+            background-color: pink;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+
+        li {
+            list-style: none;
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #f0f0f0;
+        }
+
+        .delete-btn {
+            margin-left: 10px;
+            background-color: red;
+            color: white;
+            border: none;
+            padding: 5px;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+
+        .edit-btn {
+            margin-left: 10px;
+            background-color: green;
+            color: white;
+            border: none;
+            padding: 5px;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <form id="task-form">
+        <input type="text" id="task-name" placeholder="Task Name" required>
+        <input type="time" id="task-start-time" required>
+        <input type="time" id="task-end-time" required>
+        <button type="submit">Add Task</button>
+    </form>
+    <ul id="task-list"></ul>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', loadTasks);
+
+        document.getElementById('task-form').addEventListener('submit', addTask);
+
+        function addTask(e) {
+            e.preventDefault();
+
+            const taskName = document.getElementById('task-name').value;
+            const startTime = document.getElementById('task-start-time').value;
+            const endTime = document.getElementById('task-end-time').value;
+
+            const task = { name: taskName, startTime: startTime, endTime: endTime };
+
+            let tasks = getTasks();
+            tasks.push(task);
+
+            tasks.sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+            localStorage.setItem('tasks', JSON.stringify(tasks));
+
+            renderTasks();
+
+            document.getElementById('task-form').reset();
+        }
+
+        function getTasks() {
+            return localStorage.getItem('tasks') ? JSON.parse(localStorage.getItem('tasks')) : [];
+        }
+
+        function loadTasks() {
+            renderTasks();
+        }
+
+        function renderTasks() {
+            const tasks = getTasks();
+            const taskList = document.getElementById('task-list');
+            taskList.innerHTML = '';
+
+            let lastEndTime = "00:00";
+
+            tasks.forEach(task => {
+                if (lastEndTime < task.startTime) {
+                    renderNotAllottedTimeSlot(taskList, lastEndTime, task.startTime);
+                }
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <span>${task.name} (${formatTime(task.startTime)} - ${formatTime(task.endTime)})</span>
+                    <button class="edit-btn" onclick="editTask('${task.startTime}')">Edit</button>
+                    <button class="delete-btn" onclick="deleteTask('${task.startTime}')">Delete</button>
+                `;
+                taskList.appendChild(li);
+                lastEndTime = task.endTime;
+            });
+
+            if (lastEndTime < "23:59") {
+                renderNotAllottedTimeSlot(taskList, lastEndTime, "23:59");
+            }
+        }
+
+        function renderNotAllottedTimeSlot(taskList, startTime, endTime) {
+            const duration = calculateDuration(startTime, endTime);
+            const li = document.createElement('li');
+            li.className = 'not-allotted';
+            li.innerHTML = `
+                <span>Not Allotted (${formatTime(startTime)} - ${formatTime(endTime)}) - ${duration}</span>
+            `;
+            taskList.appendChild(li);
+        }
+
+        function formatTime(time) {
+            let [hours, minutes] = time.split(':');
+            hours = parseInt(hours);
+
+            let period = 'AM';
+            if (hours >= 12) {
+                period = 'PM';
+                hours = hours > 12 ? hours - 12 : hours;
+            } else if (hours === 0) {
+                hours = 12;
+            }
+
+            return `${hours}:${minutes} ${period}`;
+        }
+
+        function calculateDuration(startTime, endTime) {
+            const start = convertToMinutes(startTime);
+            const end = convertToMinutes(endTime);
+
+            const diff = end - start;
+            const hours = Math.floor(diff / 60);
+            const minutes = diff % 60;
+
+            return `${hours}h ${minutes}m`;
+        }
+
+        function convertToMinutes(time) {
+            let [hours, minutes] = time.split(':');
+            return parseInt(hours) * 60 + parseInt(minutes);
+        }
+
+        function deleteTask(startTime) {
+            let tasks = getTasks();
+            tasks = tasks.filter(task => task.startTime !== startTime);
+            localStorage.setItem('tasks', JSON.stringify(tasks));
+            renderTasks();
+        }
+
+        function editTask(startTime) {
+            let tasks = getTasks();
+            const taskToEdit = tasks.find(task => task.startTime === startTime);
+
+            if (taskToEdit) {
+                document.getElementById('task-name').value = taskToEdit.name;
+                document.getElementById('task-start-time').value = taskToEdit.startTime;
+                document.getElementById('task-end-time').value = taskToEdit.endTime;
+
+                // Remove the task being edited
+                tasks = tasks.filter(task => task.startTime !== startTime);
+                localStorage.setItem('tasks', JSON.stringify(tasks));
+
+                renderTasks();
+            }
+        }
+    </script>
+</body>
+</html> -->
+
+
+
+<!-- unallocated time with edit button -->
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task List with Time Allotment</title>
+    <style>
+        .not-allotted {
+            background-color: pink;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+
+        li {
+            list-style: none;
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #f0f0f0;
+        }
+
+        .delete-btn {
+            margin-left: 10px;
+            background-color: red;
+            color: white;
+            border: none;
+            padding: 5px;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+
+        .edit-btn {
+            margin-left: 10px;
+            background-color: green;
+            color: white;
+            border: none;
+            padding: 5px;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <form id="task-form">
+        <input type="text" id="task-name" placeholder="Task Name" required>
+        <input type="time" id="task-start-time" required>
+        <input type="time" id="task-end-time" required>
+        <button type="submit">Add Task</button>
+    </form>
+    <ul id="task-list"></ul>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', loadTasks);
+
+        document.getElementById('task-form').addEventListener('submit', addTask);
+
+        function addTask(e) {
+            e.preventDefault();
+
+            const taskName = document.getElementById('task-name').value;
+            const startTime = document.getElementById('task-start-time').value;
+            const endTime = document.getElementById('task-end-time').value;
+
+            const task = { name: taskName, startTime: startTime, endTime: endTime };
+
+            let tasks = getTasks();
+            tasks.push(task);
+
+            tasks.sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+            localStorage.setItem('tasks', JSON.stringify(tasks));
+
+            renderTasks();
+
+            document.getElementById('task-form').reset();
+        }
+
+        function getTasks() {
+            return localStorage.getItem('tasks') ? JSON.parse(localStorage.getItem('tasks')) : [];
+        }
+
+        function loadTasks() {
+            renderTasks();
+        }
+
+        function renderTasks() {
+            const tasks = getTasks();
+            const taskList = document.getElementById('task-list');
+            taskList.innerHTML = '';
+
+            let lastEndTime = "00:00";
+
+            tasks.forEach(task => {
+                if (lastEndTime < task.startTime) {
+                    renderNotAllottedTimeSlot(taskList, lastEndTime, task.startTime);
+                }
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <span>${task.name} (${formatTime(task.startTime)} - ${formatTime(task.endTime)})</span>
+                    <button class="edit-btn" onclick="editTask('${task.startTime}')">Edit</button>
+                    <button class="delete-btn" onclick="deleteTask('${task.startTime}')">Delete</button>
+                `;
+                taskList.appendChild(li);
+                lastEndTime = task.endTime;
+            });
+
+            if (lastEndTime < "23:59") {
+                renderNotAllottedTimeSlot(taskList, lastEndTime, "23:59");
+            }
+        }
+
+        function renderNotAllottedTimeSlot(taskList, startTime, endTime) {
+            const li = document.createElement('li');
+            li.className = 'not-allotted';
+            li.innerHTML = `
+                <span>Not Allotted (${formatTime(startTime)} - ${formatTime(endTime)})</span>
+            `;
+            taskList.appendChild(li);
+        }
+
+        function formatTime(time) {
+            let [hours, minutes] = time.split(':');
+            hours = parseInt(hours);
+
+            let period = 'AM';
+            if (hours >= 12) {
+                period = 'PM';
+                hours = hours > 12 ? hours - 12 : hours;
+            } else if (hours === 0) {
+                hours = 12;
+            }
+
+            return `${hours}:${minutes} ${period}`;
+        }
+
+        function deleteTask(startTime) {
+            let tasks = getTasks();
+            tasks = tasks.filter(task => task.startTime !== startTime);
+            localStorage.setItem('tasks', JSON.stringify(tasks));
+            renderTasks();
+        }
+
+        function editTask(startTime) {
+            let tasks = getTasks();
+            const taskToEdit = tasks.find(task => task.startTime === startTime);
+
+            if (taskToEdit) {
+                document.getElementById('task-name').value = taskToEdit.name;
+                document.getElementById('task-start-time').value = taskToEdit.startTime;
+                document.getElementById('task-end-time').value = taskToEdit.endTime;
+
+                // Remove the task being edited
+                tasks = tasks.filter(task => task.startTime !== startTime);
+                localStorage.setItem('tasks', JSON.stringify(tasks));
+
+                renderTasks();
+            }
+        }
+    </script>
+</body>
+</html> -->
+
+
+<!-- time in ascending with no allocation time also -->
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task List with Time Allotment</title>
+    <style>
+        /* Your other styles */
+        
+        .not-allotted {
+            background-color: pink;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+
+        li {
+            list-style: none;
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #f0f0f0;
+        }
+
+        .delete-btn {
+            margin-left: 10px;
+            background-color: red;
+            color: white;
+            border: none;
+            padding: 5px;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <form id="task-form">
+        <input type="text" id="task-name" placeholder="Task Name" required>
+        <input type="time" id="task-start-time" required>
+        <input type="time" id="task-end-time" required>
+        <button type="submit">Add Task</button>
+    </form>
+    <ul id="task-list"></ul>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', loadTasks);
+
+        document.getElementById('task-form').addEventListener('submit', addTask);
+
+        function addTask(e) {
+            e.preventDefault();
+
+            const taskName = document.getElementById('task-name').value;
+            const startTime = document.getElementById('task-start-time').value;
+            const endTime = document.getElementById('task-end-time').value;
+
+            const task = { name: taskName, startTime: startTime, endTime: endTime };
+
+            let tasks = getTasks();
+            tasks.push(task);
+
+            tasks.sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+            localStorage.setItem('tasks', JSON.stringify(tasks));
+
+            renderTasks();
+
+            document.getElementById('task-form').reset();
+        }
+
+        function getTasks() {
+            return localStorage.getItem('tasks') ? JSON.parse(localStorage.getItem('tasks')) : [];
+        }
+
+        function loadTasks() {
+            renderTasks();
+        }
+
+        function renderTasks() {
+            const tasks = getTasks();
+            const taskList = document.getElementById('task-list');
+            taskList.innerHTML = '';
+
+            let lastEndTime = "00:00";
+
+            tasks.forEach(task => {
+                if (lastEndTime < task.startTime) {
+                    renderNotAllottedTimeSlot(taskList, lastEndTime, task.startTime);
+                }
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <span>${task.name} (${formatTime(task.startTime)} - ${formatTime(task.endTime)})</span>
+                    <button class="delete-btn" onclick="deleteTask('${task.startTime}')">Delete</button>
+                `;
+                taskList.appendChild(li);
+                lastEndTime = task.endTime;
+            });
+
+            if (lastEndTime < "23:59") {
+                renderNotAllottedTimeSlot(taskList, lastEndTime, "23:59");
+            }
+        }
+
+        function renderNotAllottedTimeSlot(taskList, startTime, endTime) {
+            const li = document.createElement('li');
+            li.className = 'not-allotted'; // Apply the CSS class
+            li.innerHTML = `
+                <span>Not Allotted (${formatTime(startTime)} - ${formatTime(endTime)})</span>
+            `;
+            taskList.appendChild(li);
+        }
+
+        function formatTime(time) {
+            let [hours, minutes] = time.split(':');
+            hours = parseInt(hours);
+
+            let period = 'AM';
+            if (hours >= 12) {
+                period = 'PM';
+                hours = hours > 12 ? hours - 12 : hours;
+            } else if (hours === 0) {
+                hours = 12;
+            }
+
+            return `${hours}:${minutes} ${period}`;
+        }
+
+        function deleteTask(startTime) {
+            let tasks = getTasks();
+            tasks = tasks.filter(task => task.startTime !== startTime);
+            localStorage.setItem('tasks', JSON.stringify(tasks));
+            renderTasks();
+        }
+    </script>
+</body>
+</html> -->
+
+
+// basic time with acending order
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Time Allotment To-Do List</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Time Allotment To-Do List</h1>
+        <form id="task-form">
+            <input type="text" id="task-name" placeholder="Task Name" required>
+            <input type="time" id="task-start-time" required>
+            <input type="time" id="task-end-time" required>
+            <button type="submit">Add Task</button>
+        </form>
+        <ul id="task-list"></ul>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html> -->
